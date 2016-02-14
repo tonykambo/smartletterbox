@@ -56,7 +56,20 @@ float hic; // heat index
 
 // Sensor variables
 
-int state = 0;
+// Initially set to IDLE state
+
+enum SystemState {
+  IDLE,
+  LETTER_SENSOR_DETECTED,
+  PUBLISH_SENSOR_EVENT
+};
+
+enum LedState {
+  ON,
+  OFF
+};
+
+SystemState state = IDLE;
 
 //*** Initialisation ********************************************
 
@@ -66,6 +79,7 @@ void init_wifi() {
   WiFi.mode(WIFI_STA);
   Serial.println("Connecting to ");
   Serial.print(ssid);
+  Serial.print(password);
 
   if (strcmp (WiFi.SSID().c_str(), ssid) != 0) {
     WiFi.begin(ssid, password);
@@ -116,12 +130,16 @@ void init_wifi() {
 // Initialise Sensor
 
 void init_letter_sensor() {
+  Serial.println("Initialising letter sensor");
   pinMode(D6, INPUT);
-  attachInterrupt(D6, letterSensorActivated, CHANGE);
+  pinMode(D7, OUTPUT);
+  pinMode(BUILTIN_LED, OUTPUT);
+  attachInterrupt(D6, letterSensorActivated, FALLING);
+  digitalWrite(D7, LOW);
 }
 
 void letterSensorActivated() {
-  state = 1;
+  state = LETTER_SENSOR_DETECTED;
 }
 // Initialisation
 
@@ -146,38 +164,42 @@ void setup() {
 }
 
 void letterSensorChanged() {
-  state = 4;
+  state = PUBLISH_SENSOR_EVENT;
   Serial.println("letter sensor activated");
   publishLetterSensorEvent();
   delay(2000);
-  state = 0;
+  digitalWrite(D7, LOW);
+  state = IDLE;
 }
 
 // *************************************************************
 
 void loop() {
   switch (state) {
-    case 0:
+    case IDLE:
       delay(100);
       break;
-    case 1:
+    case LETTER_SENSOR_DETECTED:
+      digitalWrite(D7, HIGH);
+      connectWithBroker();
       letterSensorChanged();
       break;
     default:
       break;
   }
-  if (state == 0) {
-    readDHTSensor();
-    connectWithBroker();
-    debugDisplayPayload();
-    publishPayload();
-    ++counter;
-    delay(5000);
-  }
+  // if (state == IDLE) {
+  //   readDHTSensor();
+  //   connectWithBroker();
+  //   debugDisplayPayload();
+  //   publishPayload();
+  //   ++counter;
+  //   delay(5000);
+  // }
   ArduinoOTA.handle();
 }
 
 // ************************************************************************
+
 
 void readDHTSensor() {
    // reading DHT22
@@ -195,25 +217,30 @@ void readDHTSensor() {
 }
 
 void connectWithBroker() {
+  Serial.print("Checking broker connection..");
 
   if (!!!client.connected()) {
-    Serial.print("Reconnecting client to ");
+
+    Serial.print("\nReconnecting client to ");
     Serial.println(server);
-     while (!!!client.connect(clientId, authMethod, token)) {
+
+    while (!!!client.connect(clientId, authMethod, token)) {
       Serial.print(".");
       delay(500);
     }
     Serial.println();
+  } else {
+      Serial.println("CONNECTED");
   }
 }
 
 void publishLetterSensorEvent() {
 
-  String payload = "{\"d\":{\"myName\":\"ESP8266.LetterSensorEvent\",\"counter\":";
+  String payload = "{\"d\":{\"Type\":\"LetterSensor\",\"counter\":";
 
   payload += lettersensorcounter;
 
-  payload += ",\"status\":\"triggered\"}}";
+  payload += ",\"status\":\"ON\"}}";
 
   Serial.println("Sending payload letter sensor:");
   Serial.println(payload);
