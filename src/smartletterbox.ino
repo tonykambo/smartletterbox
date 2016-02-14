@@ -20,6 +20,7 @@ extern "C" {
 #include <Time.h>
 
 os_timer_t myTimer;
+bool timerCompleted;
 
 // WiFI credentials
 
@@ -29,8 +30,8 @@ const char* password = WIFI_PASSWORD;
 // IBM Internet of Things MQTT configuration
 
 char server[] = IOT_ORG IOT_BASE_URL;
-char topic[] = "iot-2/evt/status/fmt/json";
-char lettersensortopic[] = "iot-2/evt/status/lettersensor/json";
+char topic[] = "iot-2/evt/tempsensor/fmt/json";
+char lettersensortopic[] = "iot-2/evt/lettersensor/fmt/json";
 char authMethod[] = "use-token-auth";
 char token[] = IOT_TOKEN;
 char clientId[] = "d:" IOT_ORG ":" IOT_DEVICE_TYPE ":" IOT_DEVICE_ID;
@@ -90,7 +91,7 @@ void init_wifi() {
     Serial.print(".");
   }
   Serial.println("");
-  Serial.print("WiFi connected, IP address: ");
+  Serial.print("WiFi connected with OTA, IP address: ");
   Serial.println(WiFi.localIP());
 
 // Port defaults to 8266
@@ -127,7 +128,7 @@ void init_wifi() {
 
 }
 
-// Initialise Sensor
+// Initialise Letter Sensors
 
 void init_letter_sensor() {
   Serial.println("Initialising letter sensor");
@@ -138,16 +139,6 @@ void init_letter_sensor() {
   attachInterrupt(D6, letterBottomSensorActivated, FALLING);
   attachInterrupt(D4, letterTopSensorActivated, FALLING);
   digitalWrite(D7, LOW);
-}
-
-void letterBottomSensorActivated() {
-  state = LETTER_SENSOR_DETECTED;
-  letterSensorDetected = LETTER_BOTTOM_SENSOR;
-}
-
-void letterTopSensorActivated() {
-  state = LETTER_SENSOR_DETECTED;
-  letterSensorDetected = LETTER_TOP_SENSOR;
 }
 
 // Initialisation
@@ -168,9 +159,65 @@ void setup() {
   init_wifi();
   init_letter_sensor();
 
+  os_timer_setfn(&myTimer, timerCallback, NULL);
+  os_timer_arm(&myTimer, 15000, true);
+
 //----------------- wifi_set_sleep_type(LIGHT_SLEEP_T);
 //----------------- gpio_pin_wakeup_enable(GPIO_ID_PIN(2),GPIO_PIN_INTR_HILEVEL);
 }
+
+
+// *************************************************************
+
+void loop() {
+  switch (state) {
+    // case IDLE:
+    //   delay(100);
+    //   break;
+    case LETTER_SENSOR_DETECTED:
+      digitalWrite(D7, HIGH);
+      connectWithBroker();
+      letterSensorChanged();
+      break;
+    default:
+      break;
+  }
+
+  if (timerCompleted == true) {
+    digitalWrite(D7, HIGH);
+    readDHTSensor();
+    connectWithBroker();
+    //   debugDisplayPayload();
+    publishPayload();
+    ++counter;
+    delay(2000);
+    digitalWrite(D7, LOW);
+    timerCompleted = false;
+  }
+
+  // if (state == IDLE) {
+  //   readDHTSensor();
+  //   connectWithBroker();
+  //   debugDisplayPayload();
+  //   publishPayload();
+  //   ++counter;
+  //   delay(5000);
+  // }
+  ArduinoOTA.handle();
+  yield();
+}
+
+// timer
+
+void timerCallback(void *pArg) {
+
+  timerCompleted = true;
+
+
+
+}
+
+// Letter Sensors
 
 void letterSensorChanged() {
   state = PUBLISH_SENSOR_EVENT;
@@ -186,34 +233,19 @@ void letterSensorChanged() {
   state = IDLE;
 }
 
-// *************************************************************
 
-void loop() {
-  switch (state) {
-    case IDLE:
-      delay(100);
-      break;
-    case LETTER_SENSOR_DETECTED:
-      digitalWrite(D7, HIGH);
-      connectWithBroker();
-      letterSensorChanged();
-      break;
-    default:
-      break;
-  }
-  // if (state == IDLE) {
-  //   readDHTSensor();
-  //   connectWithBroker();
-  //   debugDisplayPayload();
-  //   publishPayload();
-  //   ++counter;
-  //   delay(5000);
-  // }
-  ArduinoOTA.handle();
+void letterBottomSensorActivated() {
+  state = LETTER_SENSOR_DETECTED;
+  letterSensorDetected = LETTER_BOTTOM_SENSOR;
 }
 
-// ************************************************************************
+void letterTopSensorActivated() {
+  state = LETTER_SENSOR_DETECTED;
+  letterSensorDetected = LETTER_TOP_SENSOR;
+}
 
+
+// DHT Sensor
 
 void readDHTSensor() {
    // reading DHT22
@@ -229,6 +261,8 @@ void readDHTSensor() {
 
   hic = dht.computeHeatIndex(t, h, false);
 }
+
+// MQTT Broker Connection and Publishing
 
 void connectWithBroker() {
   Serial.print("Checking broker connection..");
@@ -250,16 +284,14 @@ void connectWithBroker() {
 
 void publishLetterSensorEvent(int letterSensorDetected) {
 
-
   String payload = "{\"d\":{\"Type\":";
-
 
   if (letterSensorDetected == LETTER_BOTTOM_SENSOR) {
     payload += "Bottom";
   } else {
     payload += "Top";
   }
-  payload += "LetterSensor\",\"counter\":";
+  payload += "LetterSensorOTA1\",\"counter\":";
 //  String payload = "{\"d\":{\"Type\":\"LetterSensor\",\"counter\":";
 
   payload += lettersensorcounter;
@@ -269,7 +301,8 @@ void publishLetterSensorEvent(int letterSensorDetected) {
   Serial.println("Sending payload letter sensor:");
   Serial.println(payload);
 
-  if (client.publish(topic, (char*) payload.c_str())) {
+//if (client.publish(topic, (char*) payload.c_str())) {
+  if (client.publish(lettersensortopic, (char*) payload.c_str())) {
     Serial.println("Published letter sensor event OK");
   } else {
     Serial.print("Publish failed with error:");
@@ -292,6 +325,25 @@ void publishPayload() {
   payload += hic;
   payload += "}}";
 
+
+//   String payload = "{\"d\":{\"Type\":";
+//
+//   if (letterSensorDetected == LETTER_BOTTOM_SENSOR) {
+//     payload += "Bottom";
+//   } else {
+//     payload += "Top";
+//   }
+//   payload += "TSLetterSensorOTA1\",\"counter\":";
+// //  String payload = "{\"d\":{\"Type\":\"LetterSensor\",\"counter\":";
+//
+//   payload += lettersensorcounter;
+//
+//   payload += ",\"status\":\"ON\"}}";
+
+
+
+
+
   Serial.print("Sending payload: ");
   Serial.println(payload);
 
@@ -303,6 +355,12 @@ void publishPayload() {
   }
 }
 
+void callback(char* topic, byte* payload, unsigned int length) {
+ Serial.println("callback invoked");
+}
+
+// Debug
+
 void debugDisplayPayload() {
   Serial.print("Humidity: ");
   Serial.print(h);
@@ -313,8 +371,4 @@ void debugDisplayPayload() {
   Serial.print("Heat index: ");
   Serial.print(hic);
   Serial.println(" *C ");
-}
-
-void callback(char* topic, byte* payload, unsigned int length) {
- Serial.println("callback invoked");
 }
