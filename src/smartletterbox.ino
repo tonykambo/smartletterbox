@@ -56,6 +56,9 @@ float hic; // heat index
 
 // Sensor variables
 
+#define LETTER_BOTTOM_SENSOR 1
+#define LETTER_TOP_SENSOR 2
+
 // Initially set to IDLE state
 
 enum SystemState {
@@ -64,10 +67,7 @@ enum SystemState {
   PUBLISH_SENSOR_EVENT
 };
 
-enum LedState {
-  ON,
-  OFF
-};
+int letterSensorDetected = 0;
 
 SystemState state = IDLE;
 
@@ -133,14 +133,23 @@ void init_letter_sensor() {
   Serial.println("Initialising letter sensor");
   pinMode(D6, INPUT);
   pinMode(D7, OUTPUT);
+  pinMode(D4, INPUT);
   pinMode(BUILTIN_LED, OUTPUT);
-  attachInterrupt(D6, letterSensorActivated, FALLING);
+  attachInterrupt(D6, letterBottomSensorActivated, FALLING);
+  attachInterrupt(D4, letterTopSensorActivated, FALLING);
   digitalWrite(D7, LOW);
 }
 
-void letterSensorActivated() {
+void letterBottomSensorActivated() {
   state = LETTER_SENSOR_DETECTED;
+  letterSensorDetected = LETTER_BOTTOM_SENSOR;
 }
+
+void letterTopSensorActivated() {
+  state = LETTER_SENSOR_DETECTED;
+  letterSensorDetected = LETTER_TOP_SENSOR;
+}
+
 // Initialisation
 
 void setup() {
@@ -165,8 +174,13 @@ void setup() {
 
 void letterSensorChanged() {
   state = PUBLISH_SENSOR_EVENT;
+  if (letterSensorDetected == LETTER_BOTTOM_SENSOR) {
+    Serial.print("Bottom ");
+  } else {
+    Serial.print("Top ");
+  }
   Serial.println("letter sensor activated");
-  publishLetterSensorEvent();
+  publishLetterSensorEvent(letterSensorDetected);
   delay(2000);
   digitalWrite(D7, LOW);
   state = IDLE;
@@ -234,9 +248,19 @@ void connectWithBroker() {
   }
 }
 
-void publishLetterSensorEvent() {
+void publishLetterSensorEvent(int letterSensorDetected) {
 
-  String payload = "{\"d\":{\"Type\":\"LetterSensor\",\"counter\":";
+
+  String payload = "{\"d\":{\"Type\":";
+
+
+  if (letterSensorDetected == LETTER_BOTTOM_SENSOR) {
+    payload += "Bottom";
+  } else {
+    payload += "Top";
+  }
+  payload += "LetterSensor\",\"counter\":";
+//  String payload = "{\"d\":{\"Type\":\"LetterSensor\",\"counter\":";
 
   payload += lettersensorcounter;
 
