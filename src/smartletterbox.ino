@@ -132,9 +132,9 @@ void init_wifi() {
 
 void init_letter_sensor() {
   Serial.println("Initialising letter sensor");
-  pinMode(D6, INPUT);
   pinMode(D7, OUTPUT);
-  pinMode(D4, INPUT);
+  pinMode(D6, INPUT_PULLUP);
+  pinMode(D4, INPUT_PULLUP);
   pinMode(BUILTIN_LED, OUTPUT);
   attachInterrupt(D6, letterBottomSensorActivated, FALLING);
   attachInterrupt(D4, letterTopSensorActivated, FALLING);
@@ -212,9 +212,6 @@ void loop() {
 void timerCallback(void *pArg) {
 
   timerCompleted = true;
-
-
-
 }
 
 // Letter Sensors
