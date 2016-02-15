@@ -7,6 +7,7 @@
 
 extern "C" {
   #include "user_interface.h"
+  #include "gpio.h"
 }
 
 #include <ESP8266WiFi.h>
@@ -159,8 +160,11 @@ void setup() {
   init_wifi();
   init_letter_sensor();
 
-  os_timer_setfn(&myTimer, timerCallback, NULL);
-  os_timer_arm(&myTimer, 15000, true);
+//  os_timer_setfn(&myTimer, timerCallback, NULL);
+//  os_timer_arm(&myTimer, 30000, true);
+
+  gpio_pin_wakeup_enable(GPIO_ID_PIN(12),GPIO_PIN_INTR_NEGEDGE);
+  wifi_set_sleep_type(LIGHT_SLEEP_T);
 
 //----------------- wifi_set_sleep_type(LIGHT_SLEEP_T);
 //----------------- gpio_pin_wakeup_enable(GPIO_ID_PIN(2),GPIO_PIN_INTR_HILEVEL);
@@ -190,7 +194,7 @@ void loop() {
     //   debugDisplayPayload();
     publishPayload();
     ++counter;
-    delay(2000);
+    delay(500);
     digitalWrite(D7, LOW);
     timerCompleted = false;
   }
@@ -204,7 +208,7 @@ void loop() {
   //   delay(5000);
   // }
   ArduinoOTA.handle();
-  yield();
+  delay(20000);
 }
 
 // timer
@@ -225,7 +229,7 @@ void letterSensorChanged() {
   }
   Serial.println("letter sensor activated");
   publishLetterSensorEvent(letterSensorDetected);
-  delay(2000);
+  delay(1000);
   digitalWrite(D7, LOW);
   state = IDLE;
 }
@@ -321,25 +325,6 @@ void publishPayload() {
   payload += ",\"heatIndex\":";
   payload += hic;
   payload += "}}";
-
-
-//   String payload = "{\"d\":{\"Type\":";
-//
-//   if (letterSensorDetected == LETTER_BOTTOM_SENSOR) {
-//     payload += "Bottom";
-//   } else {
-//     payload += "Top";
-//   }
-//   payload += "TSLetterSensorOTA1\",\"counter\":";
-// //  String payload = "{\"d\":{\"Type\":\"LetterSensor\",\"counter\":";
-//
-//   payload += lettersensorcounter;
-//
-//   payload += ",\"status\":\"ON\"}}";
-
-
-
-
 
   Serial.print("Sending payload: ");
   Serial.println(payload);
